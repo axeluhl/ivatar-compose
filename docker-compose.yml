@@ -20,7 +20,7 @@ services:
     command: ["memcached", "-m", "64"]
 
   ivatar:
-    image: registry.linux-kernel.at/oliver/ivatar:11319c64
+    image: registry.linux-kernel.at/oliver/ivatar:6f4b7e01
     restart: unless-stopped
     depends_on:
       postgres:
