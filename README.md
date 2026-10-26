@@ -41,6 +41,8 @@ ivatar may fail once at boot if PostgreSQL isn't ready yet; Docker restarts it.
 | `config_local.py`    | yes     | ivatar settings overrides, mounted to `/app/config_local.py` (loaded last by ivatar's `config.py`). Reads values from environment variables. |
 | `Caddyfile`          | yes     | Caddy config. `trusted_proxies static private_ranges` is required so the `X-Forwarded-Proto: https` header from the reverse proxy reaches Django; otherwise Django treats requests as plain HTTP. |
 | `.env`               | **no**  | Secrets and site-specific settings (keep `chmod 600`, never commit) |
+| `update-ivatar.sh`   | yes     | Updates the pinned ivatar image to the newest `master` build (see below) |
+| `backups/`           | **no**  | Database dumps written by `update-ivatar.sh` |
 
 ### `.env` variables
 
@@ -86,18 +88,30 @@ On every start the `ivatar` container copies its static files into the shared
 
 ### Upgrading ivatar
 
-The `latest` tag in the maintainer's registry is not kept current, so the image is pinned
-to a commit tag. List available tags and their dates:
+The image is pinned to a commit tag of the maintainer's registry; the `latest` tag there is
+not kept current, and the registry also holds builds of the `devel` branch. Use
+`update-ivatar.sh` to move to the build of the newest commit on ivatar's `master` branch:
 
 ```sh
-curl -s "https://git.linux-kernel.at/api/v4/projects/oliver%2Fivatar/registry/repositories/64/tags?per_page=100" \
-  | python3 -c 'import json,sys; [print(t["name"]) for t in json.load(sys.stdin)]'
-curl -s "https://git.linux-kernel.at/api/v4/projects/oliver%2Fivatar/registry/repositories/64/tags/<tag>" \
-  | python3 -c 'import json,sys; print(json.load(sys.stdin)["created_at"])'
+./update-ivatar.sh --dry-run   # only report what would be done
+./update-ivatar.sh
 ```
 
-Then back up (see below), change the tag in `docker-compose.yml`, and run
-`docker-compose pull ivatar && docker-compose up -d`.
+The script exits if already up to date or if no image exists yet for the newest `master`
+commit. Otherwise it backs up the database to `./backups/`, switches the tag in
+`docker-compose.yml`, pulls and restarts `ivatar`, and waits for the site to answer. On
+success it commits the changed `docker-compose.yml`; on failure it switches back to the
+previous tag and prints the command to restore the backup (needed only if the new version
+had already migrated the database schema).
+
+To run it weekly, e.g. via `crontab -e`:
+
+```
+30 4 * * 1  cd /path/to/this/directory && ./update-ivatar.sh >> backups/update.log 2>&1
+```
+
+The registry has a cleanup policy that deletes old tags, so a pinned tag may later become
+unavailable for download; the locally pulled image keeps working.
 
 ### Backup and restore
 
