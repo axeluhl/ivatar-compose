@@ -202,7 +202,6 @@ explicitly.
 
 Grafana fetches avatars server-side from `[security] gravatar_url` (default
 `https://secure.gravatar.com/avatar`). That setting exists from **Grafana 13.1** on;
-Grafana 12.x has the Gravatar URL hard-coded.
 
 ```ini
 [security]
@@ -210,15 +209,36 @@ disable_gravatar = false
 gravatar_url = https://avatars.example.com/avatar
 ```
 
+Grafana 12.x has the Gravatar URL hard-coded. To use this with such an older Grafana installation, you'll have
+to work with your Grafana reverse proxy set-up (if you use Grafana behind a reverse proxy). For Apache httpd this
+would look like this additional rewrite rule in your `VirtualHost` section:
+
+```
+    # avatars from ivatar instead of Grafana/Gravatar
+    RewriteEngine on
+    RewriteRule "^/avatar/([0-9a-fA-F]{32})$" "http://docker-host:18080/avatar/$1?s=200&d=retro" [P,L,E=IVATAR:1]
+    RequestHeader set Host "avatars.example.com" env=IVATAR
+    ProxyPass "/avatar/" "!"
+    <Location "/avatar/">
+        ProxyAddHeaders Off
+    </Location>
+```
+
 ### WordPress
 
 No maintained plugin is needed (the "Libravatar" plugin on wordpress.org is from 2011).
-Add a filter, e.g. in a small must-use plugin:
+Add a filter, e.g. in a small must-use plugin, e.g., within your wordpress folder
+under `wp-content/mu-plugins/ivatar.php` like this:
 
 ```php
 add_filter('get_avatar_url', fn($url) => str_replace(
     ['secure.gravatar.com', 'www.gravatar.com', '0.gravatar.com', '1.gravatar.com', '2.gravatar.com'],
     'avatars.example.com', $url));
+add_filter('user_profile_picture_description', fn() =>
+  'Set your picture at <a href="https://avatars.example.com/">avatars.example.com</a> using this account\'s email address.');
+add_filter('wp_new_user_notification_email', function ($m) {
+  $m['message'] .= "\r\nProfile picture: https://avatars.example.com/ (use this email address)\r\n";
+  return $m; });
 ```
 
 ### Federation (optional)
