@@ -29,7 +29,7 @@ $DRY_RUN && exit 0
 
 mkdir -p "$BACKUP_DIR"
 backup="$BACKUP_DIR/ivatar-$(date +%F-%H%M)-before-$latest.dump"
-docker-compose exec -T postgres pg_dump -U ivatar -Fc ivatar > "$backup"
+umask 077; docker-compose exec -T postgres pg_dump -U ivatar -Fc ivatar > "$backup"
 echo "database backed up to $backup"
 
 sed -i "s|image: $IMAGE:$current|image: $IMAGE:$latest|" docker-compose.yml
