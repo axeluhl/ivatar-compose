@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ivatar
+      POSTGRES_USER: ivatar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ivatar -d ivatar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  memcached:
+    image: memcached:1.6-alpine
+    restart: unless-stopped
+    command: ["memcached", "-m", "64"]
+
+  ivatar:
+    image: registry.linux-kernel.at/oliver/ivatar:11319c64
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      memcached:
+        condition: service_started
+    environment:
+      POSTGRES_DB: ivatar
+      POSTGRES_USER: ivatar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: postgres
+      SECRET_KEY: ${SECRET_KEY:?set in .env}
+      IVATAR_HOSTNAME: ${IVATAR_HOSTNAME:?set in .env}
+      SITE_NAME: ${SITE_NAME:-libravatar}
+      BASE_URL: http://${IVATAR_HOSTNAME}/avatar/
+      SECURE_BASE_URL: https://${IVATAR_HOSTNAME}/avatar/
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:?set in .env}
+      SERVER_EMAIL: ${DEFAULT_FROM_EMAIL}
+      EMAIL_HOST: ${EMAIL_HOST:-localhost}
+      EMAIL_PORT: ${EMAIL_PORT:-25}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-false}
+    volumes:
+      - ./config_local.py:/app/config_local.py:ro
+      - static:/static
+    # refresh the shared static files from the image on every start
+    command: ["sh", "-c", "cp -a /app/static/. /static/ && exec /app/docker-entrypoint.sh"]
+
+  web:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - ivatar
+    ports:
+      - "${HTTP_PORT:-18080}:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - static:/srv/static:ro
+
+volumes:
+  pgdata:
+  static:
