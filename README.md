@@ -18,7 +18,7 @@ Internet ──HTTPS──> proxy host: Apache (Let's Encrypt, avatars.example.c
                     docker-host:18080
                      └─ web (Caddy) ── /static/* served from shared volume
                           └─ ivatar (Django/gunicorn, port 8081)
-                               ├─ postgres (PostgreSQL 17, volume "pgdata")
+                               ├─ postgres (PostgreSQL 17, data in /var/lib/ivatar/pgdata)
                                └─ memcached
 ```
 
@@ -49,7 +49,7 @@ ivatar may fail once at boot if PostgreSQL isn't ready yet; Docker restarts it.
 | Variable              | Meaning |
 |-----------------------|---------|
 | `IVATAR_HOSTNAME`     | Public host name (e.g. `avatars.example.com`). Used for `ALLOWED_HOSTS`, CSRF trusted origins, and the avatar base URLs. Requests with another `Host` header get HTTP 400. |
-| `POSTGRES_PASSWORD`   | Password of DB user `ivatar`. Only used when the `pgdata` volume is first initialised; changing it later requires `ALTER USER` in PostgreSQL too. |
+| `POSTGRES_PASSWORD`   | Password of DB user `ivatar`. Only used when the database directory is first initialised; changing it later requires `ALTER USER` in PostgreSQL too. |
 | `SECRET_KEY`          | Django signing key (sessions, CSRF, password-reset/confirmation links). Must be random and stay stable; changing it logs everyone out. Generate with `python3 -c 'import secrets; print(secrets.token_urlsafe(50))'`. ivatar ships a public default key, so this must be set. |
 | `DEFAULT_FROM_EMAIL`  | Sender address for confirmation/reset mails (also used as `SERVER_EMAIL`) |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS` | SMTP settings |
@@ -80,11 +80,25 @@ docker-compose ps                    # status
 docker-compose logs -f ivatar        # application logs
 docker-compose restart ivatar        # after editing config_local.py
 docker-compose restart web           # after editing Caddyfile
-docker-compose down                  # stop (data volumes are kept)
+docker-compose down                  # stop (data is kept)
 ```
 
 On every start the `ivatar` container copies its static files into the shared
 `static` volume and runs the Django database migrations.
+
+### Data locations
+
+- `/var/lib/ivatar/pgdata` (bind mount): the PostgreSQL data directory with all accounts,
+  email addresses and uploaded photos (photos are stored in the database). Create it before
+  the first start (`sudo mkdir -p /var/lib/ivatar/pgdata`); the postgres container takes
+  ownership (uid 999, which may show under some other user name on the host). Don't back it
+  up by copying files while PostgreSQL runs; use `pg_dump` (see below).
+- Docker volume `static`: CSS, JavaScript, fonts and default images copied from the image
+  on every start. No user data; it can be deleted at any time.
+
+To move an existing `pgdata` Docker volume to the host directory: `docker-compose stop
+ivatar postgres`, copy it with `docker run --rm -v <project>_pgdata:/from -v
+/var/lib/ivatar/pgdata:/to alpine cp -a /from/. /to/`, then `docker-compose up -d`.
 
 ### Upgrading ivatar
 

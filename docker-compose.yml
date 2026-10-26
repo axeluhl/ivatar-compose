@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ivatar
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - /var/lib/ivatar/pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ivatar -d ivatar"]
       interval: 5s
@@ -62,5 +62,4 @@ services:
       - static:/srv/static:ro
 
 volumes:
-  pgdata:
   static:
